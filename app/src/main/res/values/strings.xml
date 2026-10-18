@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My IP</string>
+    <string name="widget_medium_name">My IP — карта</string>
+    <string name="widget_small_name">My IP</string>
+    <string name="widget_medium_desc">IP, страна, город и карта</string>
+    <string name="widget_small_desc">IP, страна и город</string>
+
+    <string name="placeholder_time">Today, --:--</string>
+    <string name="placeholder_value">—</string>
+    <string name="label_ip">IP Address</string>
+    <string name="label_location">Location</string>
+    <string name="refresh">Обновить</string>
+    <string name="map_desc">Карта местоположения IP</string>
+
+    <string name="btn_refresh">Обновить</string>
+    <string name="btn_pin_medium">Виджет 4×2</string>
+    <string name="btn_pin_small">Виджет 2×2</string>
+    <string name="btn_save">Сохранить</string>
+    <string name="section_widget">Добавить на главный экран</string>
+    <string name="section_names">Названия IP</string>
+    <string name="names_help">Одна строка — один адрес, например «203.0.113.42 = Home». Название показывается в виджете рядом с IP.</string>
+    <string name="footer">Данные IP: ipwho.is, ipapi.co, ipinfo.io. Карта: © OpenStreetMap contributors, © CARTO.\nВиджет обновляется каждые 30 минут, при смене сети и по кнопке ↻.</string>
+</resources>
