@@ -28,6 +28,7 @@ final class WidgetUpdater {
     private static final AtomicBoolean RUNNING = new AtomicBoolean(false);
     private static final long BACKGROUND_BUDGET_MS = 20_000;
     private static final long MIN_TILE_BUDGET_MS = 6_000;
+    private static final long MIN_ANIMATION_MS = 1500;
     static final float MAP_CORNER_DP = 14f;
 
     private WidgetUpdater() {}
@@ -113,10 +114,12 @@ final class WidgetUpdater {
     // ---------- внутренности ----------
 
     private static boolean doRefresh(Context app, long deadline) {
-        showUpdating(app);
+        long started = SystemClock.elapsedRealtime();
+        Ticker ticker = Ticker.start(app);
         boolean ok;
         try {
-            IpInfo info = IpFetcher.fetch(deadline);
+            IpInfo previous = Store.load(app);
+            IpInfo info = IpFetcher.fetch(Store.source(app), Store.customUrl(app), previous, deadline);
             info.fetchedAt = System.currentTimeMillis();
             Store.save(app, info);
             Store.setLastFailed(app, false);
@@ -126,6 +129,11 @@ final class WidgetUpdater {
             Store.setLastFailed(app, true);
             ok = false;
         }
+        // Анимацию показываем хотя бы полторы секунды, иначе её не заметно.
+        long shown = SystemClock.elapsedRealtime() - started;
+        if (shown < MIN_ANIMATION_MS) SystemClock.sleep(MIN_ANIMATION_MS - shown);
+        ticker.stop();
+
         long tileDeadline = Math.max(deadline, SystemClock.elapsedRealtime() + MIN_TILE_BUDGET_MS);
         updateAll(app, true, tileDeadline);
         return ok;
@@ -206,6 +214,10 @@ final class WidgetUpdater {
 
         v.setTextViewText(R.id.updated, header(c, info));
         v.setTextViewText(R.id.ip, has ? info.ip : dash);
+        v.setTextViewText(R.id.ip_pulse_a, has ? info.ip : dash);
+        v.setTextViewText(R.id.ip_pulse_b, has ? info.ip : dash);
+        v.setViewVisibility(R.id.ip, View.VISIBLE);
+        v.setViewVisibility(R.id.ip_pulse, View.GONE);
 
         String name = has ? Store.nameFor(c, info.ip) : null;
         if (name != null) {
@@ -227,19 +239,72 @@ final class WidgetUpdater {
         return v;
     }
 
-    private static void showUpdating(Context app) {
-        AppWidgetManager m = AppWidgetManager.getInstance(app);
-        for (int id : ids(app, m, IpWidgetSmall.class)) partialHeader(app, m, id, R.layout.widget_small);
-        for (int id : ids(app, m, IpWidgetMedium.class)) partialHeader(app, m, id, R.layout.widget_medium);
+    /**
+     * Анимация обновления: IP плавно мигает (ViewFlipper в разметке),
+     * в заголовке «Updating» с бегущими точками. Останавливается полным обновлением виджета.
+     */
+    private static final class Ticker implements Runnable {
+        private final Context app;
+        private final Thread thread;
+        private volatile boolean stopped;
+
+        private Ticker(Context app) {
+            this.app = app;
+            this.thread = new Thread(this, "ip-ticker");
+        }
+
+        static Ticker start(Context app) {
+            Ticker t = new Ticker(app);
+            t.thread.start();
+            return t;
+        }
+
+        void stop() {
+            stopped = true;
+            thread.interrupt();
+            try {
+                thread.join(1000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        @Override
+        public void run() {
+            AppWidgetManager m = AppWidgetManager.getInstance(app);
+            int[] small = ids(app, m, IpWidgetSmall.class);
+            int[] medium = ids(app, m, IpWidgetMedium.class);
+            IpInfo info = Store.load(app);
+            String ip = info != null && !info.ip.isEmpty() ? info.ip : app.getString(R.string.placeholder_value);
+            int step = 0;
+            while (!stopped) {
+                String dots = "...".substring(0, step % 4);
+                for (int id : small) partialUpdating(app, m, id, R.layout.widget_small, ip, dots, step == 0);
+                for (int id : medium) partialUpdating(app, m, id, R.layout.widget_medium, ip, dots, step == 0);
+                step++;
+                try {
+                    Thread.sleep(400);
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+        }
     }
 
-    private static void partialHeader(Context app, AppWidgetManager m, int id, int layout) {
+    private static void partialUpdating(Context app, AppWidgetManager m, int id, int layout,
+                                        String ip, String dots, boolean first) {
         RemoteViews v = new RemoteViews(app.getPackageName(), layout);
-        v.setTextViewText(R.id.updated, "Updating…");
+        v.setTextViewText(R.id.updated, "Updating" + dots);
+        if (first) {
+            v.setTextViewText(R.id.ip_pulse_a, ip);
+            v.setTextViewText(R.id.ip_pulse_b, ip);
+            v.setViewVisibility(R.id.ip, View.INVISIBLE);
+            v.setViewVisibility(R.id.ip_pulse, View.VISIBLE);
+        }
         try {
             m.partiallyUpdateAppWidget(id, v);
         } catch (RuntimeException e) {
-            Log.w(TAG, "header update failed", e);
+            Log.w(TAG, "updating state failed", e);
         }
     }
 

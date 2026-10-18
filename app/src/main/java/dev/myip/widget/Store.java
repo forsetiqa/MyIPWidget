@@ -15,6 +15,8 @@ final class Store {
     private static final String KEY_INFO = "info";
     private static final String KEY_ERROR = "error";
     private static final String KEY_NAMES = "names";
+    private static final String KEY_SOURCE = "source";
+    private static final String KEY_CUSTOM_URL = "customUrl";
 
     private static final String DEFAULT_NAMES =
             "203.0.113.42 = Home\n203.0.113.43 = Work\n";
@@ -51,6 +53,22 @@ final class Store {
 
     static void setLastFailed(Context c, boolean failed) {
         prefs(c).edit().putBoolean(KEY_ERROR, failed).apply();
+    }
+
+    static IpSource source(Context c) {
+        return IpSource.fromName(prefs(c).getString(KEY_SOURCE, null));
+    }
+
+    static void setSource(Context c, IpSource s) {
+        prefs(c).edit().putString(KEY_SOURCE, s.name()).apply();
+    }
+
+    static String customUrl(Context c) {
+        return prefs(c).getString(KEY_CUSTOM_URL, "");
+    }
+
+    static void setCustomUrl(Context c, String url) {
+        prefs(c).edit().putString(KEY_CUSTOM_URL, url == null ? "" : url.trim()).apply();
     }
 
     static String names(Context c) {

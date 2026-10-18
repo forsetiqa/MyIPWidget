@@ -16,11 +16,31 @@ final class IpInfo {
     double lon = Double.NaN;
     String isp = "";
     String timezone = "";
+    /** Каким сервисом определён IP. */
     String source = "";
+    /** Каким сервисом определено местоположение. */
+    String geoSource = "";
     long fetchedAt;
 
     boolean hasCoords() {
         return !Double.isNaN(lat) && !Double.isNaN(lon);
+    }
+
+    boolean hasGeo() {
+        return hasCoords() || !country.isEmpty() || !city.isEmpty();
+    }
+
+    /** Переносит местоположение из другого результата (для того же IP). */
+    void copyGeoFrom(IpInfo o) {
+        country = o.country;
+        countryCode = o.countryCode;
+        region = o.region;
+        city = o.city;
+        lat = o.lat;
+        lon = o.lon;
+        isp = o.isp;
+        timezone = o.timezone;
+        geoSource = o.geoSource;
     }
 
     /** Эмодзи-флаг из двухбуквенного кода страны. */
@@ -62,6 +82,7 @@ final class IpInfo {
         o.put("isp", isp);
         o.put("timezone", timezone);
         o.put("source", source);
+        o.put("geoSource", geoSource);
         o.put("fetchedAt", fetchedAt);
         return o;
     }
@@ -78,6 +99,7 @@ final class IpInfo {
         i.isp = Json.str(o, "isp");
         i.timezone = Json.str(o, "timezone");
         i.source = Json.str(o, "source");
+        i.geoSource = Json.str(o, "geoSource");
         i.fetchedAt = o.optLong("fetchedAt", 0L);
         return i;
     }

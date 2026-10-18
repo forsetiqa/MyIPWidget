@@ -77,19 +77,64 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/ip"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="24dp"
-                android:autoSizeMaxTextSize="18sp"
-                android:autoSizeMinTextSize="8sp"
-                android:autoSizeStepGranularity="1sp"
-                android:autoSizeTextType="uniform"
-                android:gravity="center_vertical"
-                android:maxLines="1"
-                android:text="@string/placeholder_value"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold" />
+                android:layout_height="24dp">
+
+                <TextView
+                        android:id="@+id/ip"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:autoSizeMaxTextSize="18sp"
+                        android:autoSizeMinTextSize="8sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:text="@string/placeholder_value"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                <!-- Во время обновления IP плавно мигает: перекрёстное затухание двух копий -->
+                <ViewFlipper
+                    android:id="@+id/ip_pulse"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:autoStart="true"
+                    android:flipInterval="650"
+                    android:inAnimation="@android:anim/fade_in"
+                    android:outAnimation="@android:anim/fade_out"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/ip_pulse_a"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:autoSizeMaxTextSize="18sp"
+                        android:autoSizeMinTextSize="8sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:text="@string/placeholder_value"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/ip_pulse_b"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:autoSizeMaxTextSize="18sp"
+                        android:autoSizeMinTextSize="8sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center_vertical"
+                        android:maxLines="1"
+                        android:text="@string/placeholder_value"
+                        android:textColor="@color/text_dim"
+                        android:textStyle="bold" />
+                </ViewFlipper>
+            </FrameLayout>
         </LinearLayout>
 
         <LinearLayout
