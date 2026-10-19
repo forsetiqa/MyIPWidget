@@ -20,8 +20,7 @@ final class Store {
     private static final String KEY_THEME_MODE = "themeMode";
     private static final String KEY_PHASE_START = "phaseStart_";
 
-    private static final String DEFAULT_NAMES =
-            "203.0.113.42 = Home\n203.0.113.43 = Work\n";
+    private static final String DEFAULT_NAMES = "";
 
     private static final Pattern IP_TOKEN = Pattern.compile(
             "([0-9]{1,3}(?:\\.[0-9]{1,3}){3}|[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7})");
