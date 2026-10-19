@@ -17,6 +17,8 @@
     <string name="btn_pin_medium">Виджет 4×2</string>
     <string name="btn_pin_small">Виджет 2×2</string>
     <string name="btn_save">Сохранить</string>
+    <string name="section_theme">Оформление</string>
+    <string name="theme_help">Авто — режим меняется по времени на телефоне, а не по стране IP. Нажми на время, чтобы изменить.</string>
     <string name="section_source">Где определять IP</string>
     <string name="source_help">При раздельной маршрутизации (podkop, VPN по доменам) виджет покажет IP того маршрута, через который идёт выбранный сервис. Местоположение IP определяется отдельно (ipwho.is и др.).</string>
     <string name="custom_url_hint">https://… — ответ с IP-адресом</string>

@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Ночь и Закат -->
     <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/app_bg</item>
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:colorPrimary">@color/app_bg</item>
         <item name="android:statusBarColor">@color/app_bg</item>
         <item name="android:navigationBarColor">@color/app_bg</item>
+    </style>
+
+    <!-- Рассвет и День -->
+    <style name="AppTheme.Light" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_bg_light</item>
+        <item name="android:colorAccent">@color/accent_light</item>
+        <item name="android:colorPrimary">@color/app_bg_light</item>
+        <item name="android:statusBarColor">@color/app_bg_light</item>
+        <item name="android:navigationBarColor">@color/app_bg_light</item>
     </style>
 </resources>

@@ -17,6 +17,8 @@ final class Store {
     private static final String KEY_NAMES = "names";
     private static final String KEY_SOURCE = "source";
     private static final String KEY_CUSTOM_URL = "customUrl";
+    private static final String KEY_THEME_MODE = "themeMode";
+    private static final String KEY_PHASE_START = "phaseStart_";
 
     private static final String DEFAULT_NAMES =
             "203.0.113.42 = Home\n203.0.113.43 = Work\n";
@@ -69,6 +71,25 @@ final class Store {
 
     static void setCustomUrl(Context c, String url) {
         prefs(c).edit().putString(KEY_CUSTOM_URL, url == null ? "" : url.trim()).apply();
+    }
+
+    /** "AUTO" или имя {@link Phase} для ручного режима. */
+    static String themeMode(Context c) {
+        return prefs(c).getString(KEY_THEME_MODE, ThemeClock.MODE_AUTO);
+    }
+
+    static void setThemeMode(Context c, String mode) {
+        prefs(c).edit().putString(KEY_THEME_MODE, mode).apply();
+    }
+
+    /** Начало режима, минут от полуночи. */
+    static int phaseStart(Context c, Phase p) {
+        int v = prefs(c).getInt(KEY_PHASE_START + p.name(), p.defaultStart);
+        return v < 0 || v >= 24 * 60 ? p.defaultStart : v;
+    }
+
+    static void setPhaseStart(Context c, Phase p, int minutes) {
+        prefs(c).edit().putInt(KEY_PHASE_START + p.name(), minutes).apply();
     }
 
     static String names(Context c) {

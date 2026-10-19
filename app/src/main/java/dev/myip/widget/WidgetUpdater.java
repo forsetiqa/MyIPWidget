@@ -142,24 +142,26 @@ final class WidgetUpdater {
     static void updateAll(Context app, boolean allowNetwork, long deadline) {
         AppWidgetManager m = AppWidgetManager.getInstance(app);
         IpInfo info = Store.load(app);
+        Theme theme = Theme.current(app);
 
         for (int id : ids(app, m, IpWidgetSmall.class)) {
-            safeUpdate(m, id, build(app, false, info, null), null);
+            safeUpdate(m, id, build(app, false, info, null, theme), null);
         }
 
         int[] medium = ids(app, m, IpWidgetMedium.class);
         // Сначала текст (карта остаётся прежней), потом перерисованная карта.
         for (int id : medium) {
             try {
-                m.partiallyUpdateAppWidget(id, build(app, true, info, null));
+                m.partiallyUpdateAppWidget(id, build(app, true, info, null, theme));
             } catch (RuntimeException e) {
                 Log.w(TAG, "partial update failed", e);
             }
         }
         for (int id : medium) {
-            Bitmap map = renderMap(app, m, id, info, allowNetwork, deadline);
-            safeUpdate(m, id, build(app, true, info, map), build(app, true, info, null));
+            Bitmap map = renderMap(app, m, id, info, theme, allowNetwork, deadline);
+            safeUpdate(m, id, build(app, true, info, map, theme), build(app, true, info, null, theme));
         }
+        ThemeClock.scheduleNext(app);
     }
 
     private static void safeUpdate(AppWidgetManager m, int id, RemoteViews views, RemoteViews fallback) {
@@ -177,7 +179,7 @@ final class WidgetUpdater {
         }
     }
 
-    private static Bitmap renderMap(Context app, AppWidgetManager m, int id, IpInfo info,
+    private static Bitmap renderMap(Context app, AppWidgetManager m, int id, IpInfo info, Theme theme,
                                     boolean allowNetwork, long deadline) {
         Bundle o = m.getAppWidgetOptions(id);
         boolean land = app.getResources().getConfiguration().orientation
@@ -197,18 +199,19 @@ final class WidgetUpdater {
         float mapH = hDp - 20f;
         float density = app.getResources().getDisplayMetrics().density;
         try {
-            return MapRenderer.render(app, info, mapW, mapH, density,
-                    app.getColor(R.color.widget_bg), MAP_CORNER_DP, allowNetwork, deadline,
-                    MapRenderer.WIDGET_MAX_SIDE_PX);
+            // Карта начинается на 10dp ниже верха виджета — углы заливаем его градиентом.
+            return MapRenderer.render(app, info, mapW, mapH, density, theme, 10f, hDp,
+                    MAP_CORNER_DP, allowNetwork, deadline, MapRenderer.WIDGET_MAX_SIDE_PX);
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "map render failed", e);
             return null;
         }
     }
 
-    static RemoteViews build(Context c, boolean medium, IpInfo info, Bitmap map) {
+    static RemoteViews build(Context c, boolean medium, IpInfo info, Bitmap map, Theme t) {
         RemoteViews v = new RemoteViews(c.getPackageName(),
                 medium ? R.layout.widget_medium : R.layout.widget_small);
+        applyTheme(v, medium, t);
         boolean has = info != null && !info.ip.isEmpty();
         String dash = c.getString(R.string.placeholder_value);
 
@@ -237,6 +240,23 @@ final class WidgetUpdater {
         v.setOnClickPendingIntent(R.id.refresh, refreshIntent(c));
         v.setOnClickPendingIntent(R.id.root, openAppIntent(c));
         return v;
+    }
+
+    /** Цвета режима (рассвет, день, закат, ночь). */
+    private static void applyTheme(RemoteViews v, boolean medium, Theme t) {
+        v.setInt(R.id.root, "setBackgroundResource", t.widgetBgRes);
+        v.setInt(R.id.card_ip, "setBackgroundResource", t.cardRes);
+        v.setInt(R.id.card_loc, "setBackgroundResource", t.cardRes);
+        if (medium) v.setInt(R.id.map, "setBackgroundResource", t.cardRes);
+        v.setTextColor(R.id.updated, t.text);
+        v.setInt(R.id.refresh, "setColorFilter", t.text);
+        v.setTextColor(R.id.label_ip, t.textSecondary);
+        v.setTextColor(R.id.ip_name, t.accent);
+        v.setTextColor(R.id.ip, t.text);
+        v.setTextColor(R.id.ip_pulse_a, t.text);
+        v.setTextColor(R.id.ip_pulse_b, t.textDim);
+        v.setTextColor(R.id.country, t.textSecondary);
+        v.setTextColor(R.id.city, t.text);
     }
 
     /**

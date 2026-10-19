@@ -3,27 +3,39 @@ package dev.myip.widget;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.TimePickerDialog;
 import android.appwidget.AppWidgetManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.format.DateFormat;
 import android.text.format.DateUtils;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowInsetsController;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Locale;
 
-/** Экран приложения: текущий IP, карта, выбор сервиса, добавление виджетов и названия IP. */
+/** Экран приложения: текущий IP, карта, оформление, выбор сервиса, добавление виджетов и названия IP. */
 public class MainActivity extends Activity {
     private static final float MAP_HEIGHT_DP = 190f;
 
@@ -38,6 +50,8 @@ public class MainActivity extends Activity {
     private EditText customUrlEdit;
     private View customBox;
     private Button refreshButton;
+    private LinearLayout scheduleBox;
+    private Theme theme;
 
     private boolean refreshing;
     private ObjectAnimator pulse;
@@ -54,6 +68,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        theme = Theme.current(this);
+        setTheme(theme.dark ? R.style.AppTheme : R.style.AppTheme_Light);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -74,6 +90,11 @@ public class MainActivity extends Activity {
         customUrlEdit = findViewById(R.id.custom_url);
         customBox = findViewById(R.id.custom_box);
         refreshButton = findViewById(R.id.btn_refresh);
+        scheduleBox = findViewById(R.id.theme_schedule);
+
+        applyTheme(root);
+        mapView.setClipToOutline(true); // скругление углов карты по фону-карточке
+        setupThemeChooser();
 
         namesEdit.setText(Store.names(this));
         customUrlEdit.setText(Store.customUrl(this));
@@ -98,12 +119,153 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Пока приложение было свёрнуто, мог наступить другой режим.
+        if (Theme.current(this).phase != theme.phase) recreate();
+    }
+
+    @Override
     protected void onDestroy() {
         refreshing = false;
         ui.removeCallbacks(dotsTick);
         if (pulse != null) pulse.cancel();
         super.onDestroy();
     }
+
+    // ---------- оформление ----------
+
+    /** Перекрашивает экран под режим: фон-градиент, карточки, цвета текста, системные панели. */
+    private void applyTheme(View root) {
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{theme.bgTop, theme.bgBottom}));
+        recolor(root, getColor(R.color.text_primary), getColor(R.color.text_secondary), getColor(R.color.accent));
+
+        Window w = getWindow();
+        w.setStatusBarColor(theme.bgTop);
+        w.setNavigationBarColor(theme.bgBottom);
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance(theme.dark ? 0 : mask, mask);
+            }
+        } else {
+            View decor = w.getDecorView();
+            int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            int f = decor.getSystemUiVisibility();
+            decor.setSystemUiVisibility(theme.dark ? (f & ~light) : (f | light));
+        }
+    }
+
+    private void recolor(View v, int primary, int secondary, int accent) {
+        if ("card".equals(v.getTag())) v.setBackgroundResource(theme.cardRes);
+        if (v instanceof TextView && !(v instanceof Button)) {
+            TextView tv = (TextView) v;
+            int c = tv.getCurrentTextColor();
+            if (c == primary) tv.setTextColor(theme.text);
+            else if (c == secondary) tv.setTextColor(theme.textSecondary);
+            else if (c == accent) tv.setTextColor(theme.accent);
+            if (v instanceof EditText) tv.setHintTextColor(theme.textSecondary);
+        }
+        if (v instanceof ViewGroup && !(v instanceof AdapterView)) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) recolor(g.getChildAt(i), primary, secondary, accent);
+        }
+    }
+
+    private void setupThemeChooser() {
+        Spinner spinner = findViewById(R.id.theme_mode);
+        Phase[] phases = Phase.values();
+        String[] items = new String[phases.length + 1];
+        items[0] = "Авто — по времени на телефоне";
+        for (int i = 0; i < phases.length; i++) items[i + 1] = "Всегда: " + phases[i].title;
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        Phase fixed = Phase.fromName(Store.themeMode(this));
+        spinner.setSelection(fixed == null ? 0 : fixed.ordinal() + 1, false);
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String mode = position == 0 ? ThemeClock.MODE_AUTO : phases[position - 1].name();
+                if (mode.equals(Store.themeMode(MainActivity.this))) return;
+                Store.setThemeMode(MainActivity.this, mode);
+                onThemeSettingsChanged();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        buildSchedule();
+    }
+
+    /** Строки «Рассвет · с 06:00»: по нажатию — выбор времени начала. */
+    private void buildSchedule() {
+        scheduleBox.removeAllViews();
+        boolean auto = ThemeClock.isAuto(this);
+        for (Phase p : Phase.values()) {
+            Theme pt = Theme.of(p);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(12), 0, dp(12));
+
+            View swatch = new View(this);
+            GradientDrawable sw = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{pt.bgTop, pt.bgBottom});
+            sw.setShape(GradientDrawable.OVAL);
+            sw.setStroke(dp(1), theme.textDim);
+            swatch.setBackground(sw);
+            row.addView(swatch, new LinearLayout.LayoutParams(dp(22), dp(22)));
+
+            TextView title = new TextView(this);
+            title.setText(p.title);
+            title.setTextColor(theme.text);
+            title.setTextSize(16f);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMarginStart(dp(12));
+            row.addView(title, lp);
+
+            TextView now = new TextView(this);
+            if (p == theme.phase) now.setText("  · сейчас");
+            now.setTextColor(theme.accent);
+            now.setTextSize(13f);
+            row.addView(now, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            final int start = Store.phaseStart(this, p);
+            TextView time = new TextView(this);
+            time.setText("с " + ThemeClock.format(start));
+            time.setTextColor(auto ? theme.accent : theme.textSecondary);
+            time.setTextSize(16f);
+            time.setTypeface(time.getTypeface(), android.graphics.Typeface.BOLD);
+            row.addView(time);
+
+            row.setOnClickListener(v -> new TimePickerDialog(this, (picker, h, m) -> {
+                Store.setPhaseStart(this, p, h * 60 + m);
+                onThemeSettingsChanged();
+            }, start / 60, start % 60, DateFormat.is24HourFormat(this)).show());
+            scheduleBox.addView(row);
+        }
+    }
+
+    private void onThemeSettingsChanged() {
+        WidgetUpdater.rerenderAsync(this, null);
+        if (Theme.current(this).phase != theme.phase) {
+            recreate();
+        } else {
+            buildSchedule();
+        }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    // ---------- сервис IP ----------
 
     private void setupSourceChooser() {
         RadioGroup group = findViewById(R.id.source_group);
@@ -116,7 +278,7 @@ public class MainActivity extends Activity {
             if (s == IpSource.YANDEX) label += " (по умолчанию)";
             if (!s.host.isEmpty()) label += "\n" + s.host;
             rb.setText(label);
-            rb.setTextColor(getColor(R.color.text_primary));
+            rb.setTextColor(theme.text);
             rb.setTextSize(14f);
             rb.setPadding(rb.getPaddingLeft(), 12, rb.getPaddingRight(), 12);
             group.addView(rb);
@@ -231,12 +393,12 @@ public class MainActivity extends Activity {
         final Context app = getApplicationContext();
         final float density = getResources().getDisplayMetrics().density;
         final float widthDp = Math.max(200f, getResources().getConfiguration().screenWidthDp - 40f);
-        final int bg = getColor(R.color.app_bg);
+        final Theme t = theme;
         new Thread(() -> {
             final Bitmap bmp;
             try {
-                bmp = MapRenderer.render(app, info, widthDp, MAP_HEIGHT_DP, density, bg,
-                        WidgetUpdater.MAP_CORNER_DP, true, SystemClock.elapsedRealtime() + 10_000L, 1080);
+                bmp = MapRenderer.render(app, info, widthDp, MAP_HEIGHT_DP, density, t, 0f, 0f, 0f,
+                        true, SystemClock.elapsedRealtime() + 10_000L, 1080);
             } catch (RuntimeException | OutOfMemoryError e) {
                 return;
             }

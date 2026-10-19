@@ -14,6 +14,11 @@ public abstract class BaseWidget extends AppWidgetProvider {
     }
 
     @Override
+    public void onDisabled(Context context) {
+        ThemeClock.scheduleNext(context); // виджетов не осталось — будильник снимется
+    }
+
+    @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         NetworkWatcher.register(context, false);
         WidgetUpdater.systemUpdateAsync(context, goAsync());

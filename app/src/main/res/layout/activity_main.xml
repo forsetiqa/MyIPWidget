@@ -25,6 +25,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:background="@drawable/card_bg"
+            android:tag="card"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -80,6 +81,7 @@
             android:layout_height="190dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/card_bg"
+            android:tag="card"
             android:contentDescription="@string/map_desc"
             android:scaleType="fitXY" />
 
@@ -89,6 +91,42 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/btn_refresh" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/section_theme"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/theme_help"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <Spinner
+            android:id="@+id/theme_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <LinearLayout
+            android:id="@+id/theme_schedule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/card_bg"
+            android:orientation="vertical"
+            android:paddingStart="14dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="4dp"
+            android:tag="card" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -127,6 +165,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:background="@drawable/card_bg"
+                android:tag="card"
                 android:hint="@string/custom_url_hint"
                 android:importantForAutofill="no"
                 android:inputType="textUri"
@@ -198,6 +237,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/card_bg"
+            android:tag="card"
             android:fontFamily="monospace"
             android:gravity="top|start"
             android:importantForAutofill="no"

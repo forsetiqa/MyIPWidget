@@ -4,10 +4,11 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.util.Log;
@@ -24,10 +25,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Рисует тёмную карту вокруг координат IP в стиле карт iOS:
- * тайлы Esri Dark Gray Canvas, перекрашенные в сине-серый (зелёные парки, синяя вода),
- * крупное название города и «пилюля» с координатами. Если Esri недоступен — тайлы OpenStreetMap
- * в тёмной инверсии. Ключи API не нужны.
+ * Рисует карту вокруг координат IP в стиле карт iOS: серые тайлы Esri Dark Gray Canvas
+ * перекрашиваются в палитру текущего режима (рассвет, день, закат, ночь), сверху — название
+ * города и «пилюля» с координатами. Если Esri недоступен — тайлы OpenStreetMap. Ключи API не нужны.
  */
 final class MapRenderer {
     private static final String TAG = "MapRenderer";
@@ -37,7 +37,6 @@ final class MapRenderer {
     private static final float SRC_PX_PER_DP_Z11 = 6.7f;
     /** Для виджета: битмап < ~400 КБ, т.к. RemoteViews передаются через Binder. */
     static final int WIDGET_MAX_SIDE_PX = 440;
-    private static final int LAND_COLOR = 0xFF2D3038;
     private static final long TILE_TTL_MS = 30L * 24 * 60 * 60 * 1000;
     private static final long ESRI_RETRY_MS = 60L * 60 * 1000;
     /** Когда Esri последний раз не отдал ни одного тайла (например, недоступен из РФ). */
@@ -65,31 +64,21 @@ final class MapRenderer {
         }
     }
 
-    /** Перекраска серых тайлов Esri: уровень серого → цвет (вода, парки, суша, дороги). */
-    private static final int[] ESRI_LUT = buildLut(new int[][]{
-            {0, 10, 16, 28},
-            {34, 24, 33, 50},     // вода
-            {66, 36, 52, 44},     // парки, лес
-            {72, 40, 50, 48},
-            {76, 45, 48, 56},     // суша
-            {95, 76, 80, 90},
-            {130, 110, 114, 124}, // дороги
-            {255, 178, 182, 190},
-    });
-
     private MapRenderer() {}
 
     /**
      * @param viewWdp     ширина области карты в dp
      * @param viewHdp     высота области карты в dp
      * @param density     плотность экрана (px на dp)
-     * @param cornerColor цвет фона под скруглёнными углами
-     * @param cornerDp    радиус скругления в dp
+     * @param theme       палитра режима
+     * @param bgOffsetDp  отступ карты от верха фона (для заливки углов градиентом фона)
+     * @param bgHeightDp  высота фона в dp
+     * @param cornerDp    радиус скругления в dp; 0 — без скругления (углы обрежет сам View)
      * @param maxSidePx   ограничение на размер битмапа по большей стороне
      */
     static Bitmap render(Context ctx, IpInfo info, float viewWdp, float viewHdp, float density,
-                         int cornerColor, float cornerDp, boolean allowNetwork, long deadline,
-                         int maxSidePx) {
+                         Theme theme, float bgOffsetDp, float bgHeightDp, float cornerDp,
+                         boolean allowNetwork, long deadline, int maxSidePx) {
         viewWdp = Math.max(40f, viewWdp);
         viewHdp = Math.max(40f, viewHdp);
         float k = Math.min(density, maxSidePx / Math.max(viewWdp, viewHdp)); // px битмапа на dp
@@ -98,30 +87,32 @@ final class MapRenderer {
 
         Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
         Canvas c = new Canvas(out);
-        c.drawColor(LAND_COLOR);
+        c.drawColor(theme.land());
 
         if (info != null && info.hasCoords()) {
             boolean esriFirst = SystemClock.elapsedRealtime() - esriFailedAt > ESRI_RETRY_MS || esriFailedAt == 0;
             Provider first = esriFirst ? Provider.ESRI : Provider.OSM;
             Provider second = esriFirst ? Provider.OSM : Provider.ESRI;
-            Bitmap base = drawBase(ctx, first, info, w, h, k, allowNetwork, deadline);
+            Bitmap base = drawBase(ctx, first, theme, info, w, h, k, allowNetwork, deadline);
             if (base == null && first == Provider.ESRI && allowNetwork) {
                 esriFailedAt = SystemClock.elapsedRealtime();
             }
-            if (base == null) base = drawBase(ctx, second, info, w, h, k, allowNetwork, deadline);
+            if (base == null) base = drawBase(ctx, second, theme, info, w, h, k, allowNetwork, deadline);
             if (base != null) {
                 c.drawBitmap(base, 0f, 0f, null);
                 base.recycle();
             }
         }
-        drawCityLabel(c, info, w, h, k);
-        drawCoordinates(c, info, w, h, k);
-        drawCorners(c, w, h, cornerDp * k, cornerColor);
+        drawCityLabel(c, theme, info, w, h, k);
+        drawCoordinates(c, theme, info, w, h, k);
+        if (cornerDp > 0) {
+            drawCorners(c, w, h, cornerDp * k, theme, -bgOffsetDp * k, (bgHeightDp - bgOffsetDp) * k);
+        }
         return out;
     }
 
     /** Собирает подложку w×h из тайлов. null — если не удалось получить ни одного тайла. */
-    private static Bitmap drawBase(Context ctx, Provider p, IpInfo info, int w, int h, float k,
+    private static Bitmap drawBase(Context ctx, Provider p, Theme theme, IpInfo info, int w, int h, float k,
                                    boolean allowNetwork, long deadline) {
         double srcPerPx = SRC_PX_PER_DP_Z11 / k; // пикселей тайла z11 на пиксель результата
         int z = MAX_ZOOM;
@@ -197,8 +188,8 @@ final class MapRenderer {
         int[] px = new int[w * h];
         scaled.getPixels(px, 0, w, 0, 0, w, h);
         scaled.recycle();
-        if (p == Provider.ESRI) recolorEsri(px);
-        else darkenOsm(px);
+        if (p == Provider.ESRI) recolorEsri(px, theme.mapLut);
+        else styleOsm(px, theme);
         return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888);
     }
 
@@ -238,25 +229,38 @@ final class MapRenderer {
         }
     }
 
-    private static void recolorEsri(int[] px) {
+    private static void recolorEsri(int[] px, int[] lut) {
         for (int i = 0; i < px.length; i++) {
             int c = px[i];
             int gray = (((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF)) / 3;
-            px[i] = ESRI_LUT[gray];
+            px[i] = lut[gray];
         }
     }
 
-    /** Тёмная тема для OSM: инверсия + поворот оттенка на 180° (как CSS invert/hue-rotate). */
-    private static void darkenOsm(int[] px) {
+    /**
+     * Запасная карта OSM: для тёмных режимов — инверсия с поворотом оттенка на 180°
+     * (как CSS invert/hue-rotate), затем подкраска под режим.
+     */
+    private static void styleOsm(int[] px, Theme theme) {
+        float a = theme.osmTintAlpha;
+        float tr = ((theme.osmTint >> 16) & 0xFF) * a;
+        float tg = ((theme.osmTint >> 8) & 0xFF) * a;
+        float tb = (theme.osmTint & 0xFF) * a;
+        float keep = 1f - a;
         for (int i = 0; i < px.length; i++) {
             int c = px[i];
             float r = (c >> 16) & 0xFF;
             float g = (c >> 8) & 0xFF;
             float b = c & 0xFF;
-            int nr = clamp(0.4908f * r - 1.2227f * g - 0.1231f * b + 230.1f);
-            int ng = clamp(-0.3642f * r - 0.3677f * g - 0.1231f * b + 230.1f);
-            int nb = clamp(-0.3642f * r - 1.2227f * g + 0.7319f * b + 230.1f);
-            px[i] = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+            if (theme.dark) {
+                float nr = 0.4908f * r - 1.2227f * g - 0.1231f * b + 230.1f;
+                float ng = -0.3642f * r - 0.3677f * g - 0.1231f * b + 230.1f;
+                float nb = -0.3642f * r - 1.2227f * g + 0.7319f * b + 230.1f;
+                r = nr;
+                g = ng;
+                b = nb;
+            }
+            px[i] = 0xFF000000 | (clamp(r * keep + tr) << 16) | (clamp(g * keep + tg) << 8) | clamp(b * keep + tb);
         }
     }
 
@@ -264,26 +268,7 @@ final class MapRenderer {
         return v < 0 ? 0 : (v > 255 ? 255 : (int) v);
     }
 
-    private static int[] buildLut(int[][] stops) {
-        int[] lut = new int[256];
-        for (int i = 0; i < 256; i++) {
-            for (int s = 0; s < stops.length - 1; s++) {
-                int[] a = stops[s];
-                int[] b = stops[s + 1];
-                if (i >= a[0] && i <= b[0]) {
-                    float t = b[0] == a[0] ? 0f : (i - a[0]) / (float) (b[0] - a[0]);
-                    int r = Math.round(a[1] + (b[1] - a[1]) * t);
-                    int g = Math.round(a[2] + (b[2] - a[2]) * t);
-                    int bl = Math.round(a[3] + (b[3] - a[3]) * t);
-                    lut[i] = 0xFF000000 | (r << 16) | (g << 8) | bl;
-                    break;
-                }
-            }
-        }
-        return lut;
-    }
-
-    private static void drawCityLabel(Canvas c, IpInfo info, int w, int h, float k) {
+    private static void drawCityLabel(Canvas c, Theme theme, IpInfo info, int w, int h, float k) {
         String label = "";
         if (info != null) {
             label = info.place();
@@ -292,26 +277,26 @@ final class MapRenderer {
         if (label.isEmpty()) return;
 
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.WHITE);
+        p.setColor(theme.label);
         p.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         p.setTextAlign(Paint.Align.CENTER);
         p.setTextSize(19f * k);
         float maxW = w * 0.88f;
         float tw = p.measureText(label);
         if (tw > maxW) p.setTextSize(p.getTextSize() * maxW / tw);
-        p.setShadowLayer(3f * k, 0f, 0f, 0xCC000000);
+        p.setShadowLayer(3f * k, 0f, 0f, theme.labelHalo);
 
         Paint.FontMetrics fm = p.getFontMetrics();
         float baseline = h * 0.44f - (fm.ascent + fm.descent) / 2f;
         c.drawText(label, w / 2f, baseline, p);
     }
 
-    private static void drawCoordinates(Canvas c, IpInfo info, int w, int h, float k) {
+    private static void drawCoordinates(Canvas c, Theme theme, IpInfo info, int w, int h, float k) {
         if (info == null || !info.hasCoords()) return;
         String text = String.format(Locale.getDefault(), "%.6f %.6f", info.lat, info.lon);
 
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.WHITE);
+        p.setColor(theme.pillText);
         p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         p.setTextAlign(Paint.Align.CENTER);
         p.setTextSize(10.5f * k);
@@ -327,22 +312,31 @@ final class MapRenderer {
         RectF r = new RectF(w / 2f - pw / 2f, bottom - ph, w / 2f + pw / 2f, bottom);
 
         Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bg.setColor(0xF0000000);
+        bg.setColor(theme.pillBg);
+        if (!theme.dark) bg.setShadowLayer(2.5f * k, 0f, 0.5f * k, 0x40000000); // светлая пилюля на светлой карте
         c.drawRoundRect(r, ph / 2f, ph / 2f, bg);
 
         Paint.FontMetrics fm = p.getFontMetrics();
         c.drawText(text, w / 2f, r.centerY() - (fm.ascent + fm.descent) / 2f, p);
     }
 
-    /** Закрашивает углы цветом фона виджета — так скругление работает и в RGB_565. */
-    private static void drawCorners(Canvas c, int w, int h, float radius, int color) {
+    /**
+     * Закрашивает углы фоном виджета (с его вертикальным градиентом) — так скругление работает и в RGB_565.
+     * bgTop/bgBottom — где верх и низ фона виджета в координатах битмапа.
+     */
+    private static void drawCorners(Canvas c, int w, int h, float radius, Theme theme, float bgTop, float bgBottom) {
         Path mask = new Path();
         mask.addRect(0, 0, w, h, Path.Direction.CW);
         Path rounded = new Path();
         rounded.addRoundRect(new RectF(0, 0, w, h), radius, radius, Path.Direction.CW);
         mask.op(rounded, Path.Op.DIFFERENCE);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(color);
+        if (theme.bgTop == theme.bgBottom) {
+            p.setColor(theme.bgTop);
+        } else {
+            p.setShader(new LinearGradient(0f, bgTop, 0f, bgBottom, theme.bgTop, theme.bgBottom,
+                    Shader.TileMode.CLAMP));
+        }
         c.drawPath(mask, p);
     }
 }

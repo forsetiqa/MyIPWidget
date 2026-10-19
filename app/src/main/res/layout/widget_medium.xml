@@ -47,6 +47,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/card_ip"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="4dp"
@@ -63,6 +64,7 @@
                     android:orientation="horizontal">
 
                     <TextView
+                        android:id="@+id/label_ip"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -145,6 +147,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/card_loc"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="6dp"
